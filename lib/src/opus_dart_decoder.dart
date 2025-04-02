@@ -132,6 +132,33 @@ class SimpleOpusDecoder extends OpusDecoder {
     }
   }
 
+  Int16List decodeEx(Uint8List? input, int frameSize, {bool fec = false, int? loss}) {
+    Pointer<Int16> outputNative =
+        opus.allocator.call<Int16>(frameSize);
+    Pointer<Uint8> inputNative;
+    if (input != null) {
+      inputNative = opus.allocator.call<Uint8>(input.length);
+      inputNative.asTypedList(input.length).setAll(0, input);
+    } else {
+      inputNative = nullptr;
+    }
+    int outputSamplesPerChannel = opus.decoder.opus_decode(_opusDecoder,
+        inputNative, input?.length ?? 0, outputNative, frameSize, fec ? 1 : 0);
+    try {
+      if (outputSamplesPerChannel >= opus_defines.OPUS_OK) {
+        _lastPacketDurationMs =
+            _packetDuration(outputSamplesPerChannel, channels, sampleRate);
+        return Int16List.fromList(
+            outputNative.asTypedList(outputSamplesPerChannel * channels));
+      } else {
+        throw OpusException(outputSamplesPerChannel);
+      }
+    } finally {
+      opus.allocator.free(inputNative);
+      opus.allocator.free(outputNative);
+    }
+  }
+
   /// Decodes an opus packet to float samples, represented as [Float32List].
   /// Use `null` as [input] to indicate packet loss.
   ///
